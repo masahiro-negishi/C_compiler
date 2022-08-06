@@ -1,2 +1,4 @@
 # ignore files in examples directory 
 examples/
+# ignore memo
+memo.md
