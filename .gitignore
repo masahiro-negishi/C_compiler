@@ -1,4 +1,14 @@
-# ignore files in examples directory 
+# files in examples directory 
 examples/
-# ignore memo
+# memo
 memo.md
+# text editor backup files
+*~
+# object files
+*.o
+# temporary files
+tmp*
+# default executable file
+a.out
+# executable compiler file
+9cc
