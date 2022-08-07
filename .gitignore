@@ -11,4 +11,4 @@ tmp*
 # default executable file
 a.out
 # executable compiler file
-9cc
+mycc

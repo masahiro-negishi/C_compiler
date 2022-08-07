@@ -4,7 +4,7 @@ assert(){
     input="$2"
 
     # compile a program that outputs $input, and store the result in $actual
-    ./9cc "$input" > tmp.s
+    ./mycc "$input" > tmp.s
     cc -o tmp tmp.s
     ./tmp
     actual="$?"

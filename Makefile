@@ -1,11 +1,11 @@
 CFLAGS=-std=c11 -g -static # -g: additional symbol table for debugger
 
-9cc: 9cc.c
+mycc: mycc.c
 
-test: 9cc
+test: mycc
 	./test.sh
 
 clean:
-	rm -f 9cc *.o *~ tmp*
+	rm -f mycc *.o *~ tmp*
 
 .PHONY: test clean
