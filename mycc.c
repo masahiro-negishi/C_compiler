@@ -7,18 +7,21 @@
 #include <stdlib.h>
 #include <string.h>
 
-//Token types
+///////////
+//Tokenizer
+///////////
+
+//Token kinds
 typedef enum{
     TK_RESERVED, //Symbols
     TK_NUM, //Integers
     TK_EOF, //End of input
 } TokenKind;
 
+//Token type
 typedef struct Token Token;
-
-//Token
 struct Token{
-    TokenKind kind; //Token type
+    TokenKind kind; //Token kind
     Token *next; //Next token
     int val; //Integer value when TokenKind == TK_NUM
     char *str; //String in input that corresponds to the token
@@ -146,12 +149,104 @@ Token *tokenize(){
     return head.next;
 }
 
+///////////////////////////
+//Parser
+//Recursive Descent Parsing
+///////////////////////////
+
+//Node kinds
+typedef enum{
+    ND_ADD,
+    ND_SUB,
+    ND_NUM,
+} NodeKind;
+
+//AST node type
+typedef struct Node Node;
+struct Node{
+    NodeKind kind;//Node kind
+    Node *lhs;//Left-hand side
+    Node *rhs;//Right-hand side
+    int val;//Integer value when kind == ND_NUM
+};
+
+//Create a new node
+//kind != ND_NUM
+Node *new_node(NodeKind kind, Node *lhs, Node *rhs){
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = kind;
+    node->lhs = lhs;
+    node->rhs = rhs;
+    return node;
+}
+
+//Create a new node
+//kind == ND_NUM
+Node *new_node_num(int val){
+    Node *node = calloc(1, sizeof(Node));
+    node->kind = ND_NUM;
+    node->val = val;
+    return node;
+}
+
+Node *expr();
+Node *num();
+
+//expr = num ('+' num | '-' num)*
+Node *expr(){
+    Node *node = num();
+    while(1){
+        if(consume('+')){
+            node = new_node(ND_ADD, node, num());
+        }
+        else if(consume('-')){
+            node = new_node(ND_SUB, node, num());
+        }
+        else{
+            return node;
+        }
+    }
+}
+
+//num
+Node *num(){
+    return new_node_num(expect_number());
+}
+
+////////////////
+//Code generator
+////////////////
+
+void gen(Node *node){
+    if(node->kind == ND_NUM){
+        printf("    push %d\n", node->val);
+        return;
+    }
+
+    gen(node->lhs);
+    gen(node->rhs);
+
+    printf("    pop rdi\n");//Pop the result of rhs to rdi
+    printf("    pop rax\n");//Pop the result of lhs to rax
+
+    switch(node->kind){
+        case ND_ADD:
+            printf("    add rax, rdi\n");
+            break;
+        case ND_SUB:
+            printf("    sub rax, rdi\n");
+            break;
+    }
+
+    printf(" push rax\n");//Store the result on the stack
+}
+
 
 int main(int argc, char **argv){
     //argv[0]: program name
     //argv[1]: input sequence
     if (argc != 2){
-        fprintf(stderr, "The number of arguments is incorrect\n");
+        error("The number of arguments is incorrect");
         return 1;
     }
 
@@ -160,27 +255,20 @@ int main(int argc, char **argv){
     token = tokenize();
     //print_tokens();//for debug
 
+    //Generate Abstract Syntax Tree(AST)
+    Node *node = expr();
+
     //Output assembly
     //Head
     printf(".intel_syntax noprefix\n");
     printf(".globl main\n\n");
     printf("main:\n");
 
-    //The type of the first token should be TK_NUM
-    printf("    mov rax, %d\n", expect_number());
+    //Convert AST to assembly
+    gen(node);
 
-    //Consume '+ num' or '- num' until reaching EOF
-    while(!at_eof()){
-        //Add
-        if(consume('+')){
-            printf("    add rax, %d\n", expect_number());
-            continue;
-        }
-        //Subtract
-        expect('-');//Current symbol should be either '+' or '-'
-        printf("    sub rax, %d\n", expect_number());           
-    }
-
+    //Result is on the top of the stack
+    printf("    pop rax\n");
     printf("    ret\n");
     return 0;
 }
