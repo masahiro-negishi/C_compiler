@@ -131,7 +131,7 @@ Token *tokenize(){
             p++;
         }
         //Symbol
-        else if(*p == '+' || *p == '-'){
+        else if(strchr("+-*/()", *p)){
             cur = new_token(TK_RESERVED, cur, p++);
         }
         //Integer
@@ -156,9 +156,11 @@ Token *tokenize(){
 
 //Node kinds
 typedef enum{
-    ND_ADD,
-    ND_SUB,
-    ND_NUM,
+    ND_ADD,//'+'
+    ND_SUB,//'-'
+    ND_MUL,//'*'
+    ND_DIV,//'/'
+    ND_NUM,//Integer
 } NodeKind;
 
 //AST node type
@@ -190,17 +192,18 @@ Node *new_node_num(int val){
 }
 
 Node *expr();
-Node *num();
+Node *mul();
+Node *primary();
 
-//expr = num ('+' num | '-' num)*
+//expr = mul ('+' mul | '-' mul)*
 Node *expr(){
-    Node *node = num();
+    Node *node = mul();
     while(1){
         if(consume('+')){
-            node = new_node(ND_ADD, node, num());
+            node = new_node(ND_ADD, node, mul());
         }
         else if(consume('-')){
-            node = new_node(ND_SUB, node, num());
+            node = new_node(ND_SUB, node, mul());
         }
         else{
             return node;
@@ -208,8 +211,29 @@ Node *expr(){
     }
 }
 
-//num
-Node *num(){
+//mul = primary ('*' primary | '/' primary)*
+Node *mul(){
+    Node *node = primary();
+    while(1){
+        if(consume('*')){
+            node = new_node(ND_MUL, node, primary());
+        }
+        else if(consume('/')){
+            node = new_node(ND_DIV, node, primary());
+        }
+        else{
+            return node;
+        }
+    }
+}
+
+//primary = num | '(' expr ')'
+Node *primary(){
+    if(consume('(')){
+        Node *node = expr();
+        expect(')');
+        return node;
+    }
     return new_node_num(expect_number());
 }
 
@@ -235,6 +259,13 @@ void gen(Node *node){
             break;
         case ND_SUB:
             printf("    sub rax, rdi\n");
+            break;
+        case ND_MUL:
+            printf("    imul rax, rdi\n");
+            break;
+        case ND_DIV:
+            printf(" cqo\n");
+            printf(" idiv rdi\n");
             break;
     }
 
