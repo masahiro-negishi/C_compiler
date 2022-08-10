@@ -25,6 +25,7 @@ struct Token{
     Token *next; //Next token
     int val; //Integer value when TokenKind == TK_NUM
     char *str; //String in input that corresponds to the token
+    int len; //Length of token (length of string for TK_RESERVED, number of digits for TK_NUM, 0 for TK_EOF)
 };
 
 //Input program
@@ -49,7 +50,7 @@ void error_at(char *loc, char *fmt, ...){
 
     int pos = loc - user_input;
     fprintf(stderr, "%s\n", user_input);
-    fprintf(stderr, "%*s", pos, " ");//output #pos spaces
+    fprintf(stderr, "%*s", pos, " "); //Output #pos spaces
     fprintf(stderr, "^ ");
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
@@ -58,8 +59,8 @@ void error_at(char *loc, char *fmt, ...){
 
 //When the current token is the same as the expected symbol, move one step.
 //Return true when moving one step. Otherwise, return false.
-bool consume(char op){
-    if(token->kind != TK_RESERVED || token->str[0] != op){
+bool consume(char *op){
+    if(token->kind != TK_RESERVED || strlen(op) != token->len || memcmp(token->str, op, token->len)){
         return false;
     }
     token = token->next;
@@ -68,8 +69,8 @@ bool consume(char op){
 
 //When the current token is the same as the expected symbol, move one step.
 //Otherwise, raise error
-void expect(char op){
-    if(token->kind != TK_RESERVED || token->str[0] != op){
+void expect(char *op){
+    if(token->kind != TK_RESERVED || strlen(op) != token->len || memcmp(token->str, op, token->len)){
         error_at(token->str, "expected '%c'", op);
     }
     token = token->next;
@@ -92,10 +93,11 @@ bool at_eof(){
 }
 
 //Make a new token and connect to cur
-Token *new_token(TokenKind kind, Token *cur, char *str){
+Token *new_token(TokenKind kind, Token *cur, char *str, int len){
     Token *tok = calloc(1, sizeof(Token));
     tok->kind = kind;
     tok->str = str;
+    tok->len = len;
     cur->next = tok;
     return tok;
 }
@@ -118,26 +120,39 @@ void print_tokens(){
     }
 }
 
+//Judge whether p starts with q
+bool startswith(char *p, char *q){
+    return memcmp(p, q, strlen(q)) == 0;
+}
+
 //Tokenize input sequence
 Token *tokenize(){
     char *p = user_input;
     Token head;
     head.next = NULL;
-    Token *cur = &head;//pointer for the last token
+    Token *cur = &head; //Pointer for the last token
 
     while(*p){
         //Skip space
         if(isspace(*p)){
             p++;
         }
-        //Symbol
-        else if(strchr("+-*/()", *p)){
-            cur = new_token(TK_RESERVED, cur, p++);
+        //Multi-letter symbol
+        //Multi-letter check should precede Single-letter check
+        else if(startswith(p, "==") || startswith(p, "!=") || startswith(p, "<=") || startswith(p, ">=")){
+            cur = new_token(TK_RESERVED, cur, p, 2);
+            p += 2;
+        }
+        //Single-letter symbol
+        else if(strchr("+-*/()<>", *p)){
+            cur = new_token(TK_RESERVED, cur, p++, 1);
         }
         //Integer
         else if(isdigit(*p)){
-            cur = new_token(TK_NUM, cur, p);
+            cur = new_token(TK_NUM, cur, p, 0);
+            char *q = p;
             cur->val = strtol(p, &p, 10);
+            cur->len = p - q;
         }
         //Error
         else{
@@ -145,7 +160,7 @@ Token *tokenize(){
         }
     }
 
-    new_token(TK_EOF, cur, p);
+    new_token(TK_EOF, cur, p, 0);
     return head.next;
 }
 
@@ -156,20 +171,24 @@ Token *tokenize(){
 
 //Node kinds
 typedef enum{
-    ND_ADD,//'+'
-    ND_SUB,//'-'
-    ND_MUL,//'*'
-    ND_DIV,//'/'
-    ND_NUM,//Integer
+    ND_ADD, //"+"
+    ND_SUB, //"-"
+    ND_MUL, //"*"
+    ND_DIV, //"/"
+    ND_EQ, //"=="
+    ND_NE, //"!="
+    ND_LT, //"<"
+    ND_LE, //"<="
+    ND_NUM, //Integer
 } NodeKind;
 
 //AST node type
 typedef struct Node Node;
 struct Node{
-    NodeKind kind;//Node kind
-    Node *lhs;//Left-hand side
-    Node *rhs;//Right-hand side
-    int val;//Integer value when kind == ND_NUM
+    NodeKind kind; //Node kind
+    Node *lhs; //Left-hand side
+    Node *rhs; //Right-hand side
+    int val; //Integer value when kind == ND_NUM
 };
 
 //Create a new node
@@ -192,18 +211,65 @@ Node *new_node_num(int val){
 }
 
 Node *expr();
+Node *equality();
+Node *relational();
+Node *add();
 Node *mul();
 Node *unary();
 Node *primary();
 
-//expr = mul ('+' mul | '-' mul)*
+//expr = equality
 Node *expr(){
+    return equality();
+}
+
+//equality = relational ("==" relational | "!=" relational)*
+Node *equality(){
+    Node *node = relational();
+    while(1){
+        if(consume("==")){
+            node = new_node(ND_EQ, node, relational());
+        }
+        else if(consume("!=")){
+            node = new_node(ND_NE, node, relational());
+        }
+        else{
+            return node;
+        }
+    }
+}
+
+//relational = add ("<" add | "<=" add | ">" add | ">= add")*
+Node *relational(){
+    Node *node = add();
+    while(1){
+        if(consume("<")){
+            node = new_node(ND_LT, node, add());
+        }
+        else if(consume("<=")){
+            node = new_node(ND_LE, node, add());
+        }
+        else if(consume(">")){
+            node = new_node(ND_LT, add(), node);
+        }
+        else if(consume(">=")){
+            node = new_node(ND_LE, add(), node);
+        }
+        else{
+            return node;
+        }
+    }
+}
+
+
+//add = mul ("+" mul | "-" mul)*
+Node *add(){
     Node *node = mul();
     while(1){
-        if(consume('+')){
+        if(consume("+")){
             node = new_node(ND_ADD, node, mul());
         }
-        else if(consume('-')){
+        else if(consume("-")){
             node = new_node(ND_SUB, node, mul());
         }
         else{
@@ -212,14 +278,14 @@ Node *expr(){
     }
 }
 
-//mul = unary ('*' unary | '/' unary)*
+//mul = unary ("*" unary | "/" unary)*
 Node *mul(){
     Node *node = unary();
     while(1){
-        if(consume('*')){
+        if(consume("*")){
             node = new_node(ND_MUL, node, unary());
         }
-        else if(consume('/')){
+        else if(consume("/")){
             node = new_node(ND_DIV, node, unary());
         }
         else{
@@ -228,24 +294,24 @@ Node *mul(){
     }
 }
 
-//unary = ('+' | '-')? primary
+//unary = ("+" | "-")? primary
 Node *unary(){
-    if(consume('+')){
-        return unary();//convert +x to x
+    if(consume("+")){
+        return unary(); //Convert +x to x
     }
-    else if(consume('-')){
-        return new_node(ND_SUB, new_node_num(0), primary());//convert -x to 0-x
+    else if(consume("-")){
+        return new_node(ND_SUB, new_node_num(0), primary()); //Convert -x to 0-x
     }
     else{
         return primary();
     }
 }
 
-//primary = num | '(' expr ')'
+//primary = num | "(" expr ")"
 Node *primary(){
-    if(consume('(')){
+    if(consume("(")){
         Node *node = expr();
-        expect(')');
+        expect(")");
         return node;
     }
     return new_node_num(expect_number());
@@ -264,8 +330,8 @@ void gen(Node *node){
     gen(node->lhs);
     gen(node->rhs);
 
-    printf("    pop rdi\n");//Pop the result of rhs to rdi
-    printf("    pop rax\n");//Pop the result of lhs to rax
+    printf("    pop rdi\n"); //Pop the result of rhs to rdi
+    printf("    pop rax\n"); //Pop the result of lhs to rax
 
     switch(node->kind){
         case ND_ADD:
@@ -281,9 +347,29 @@ void gen(Node *node){
             printf("    cqo\n");
             printf("    idiv rdi\n");
             break;
+        case ND_EQ:
+            printf("    cmp rax, rdi\n");
+            printf("    sete al\n");
+            printf("    movzb rax, al\n");
+            break;
+        case ND_NE:
+            printf("    cmp rax, rdi\n");
+            printf("    setne al\n");
+            printf("    movzb rax, al\n");
+            break;
+        case ND_LT:
+            printf("    cmp rax, rdi\n");
+            printf("    setl al\n");
+            printf("    movzb rax, al\n");
+            break;
+        case ND_LE:
+            printf("    cmp rax, rdi\n");
+            printf("    setle al\n");
+            printf("    movzb rax, al\n");
+            break;
     }
 
-    printf("    push rax\n");//Store the result on the stack
+    printf("    push rax\n"); //Store the result on the stack
 }
 
 
