@@ -16,9 +16,9 @@ int main(int argc, char **argv){
     //print_tokens();//for debug
 
     //Generate Abstract Syntax Tree(AST)
-    Node *node = expr();
+    program();
 
     //Output assembly
-    codegen(node);
+    codegen();
     return 0;
 }

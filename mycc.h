@@ -12,6 +12,7 @@
 //Token kinds
 typedef enum{
     TK_RESERVED, //Symbols
+    TK_IDENT, //Identifiers
     TK_NUM, //Integers
     TK_EOF, //End of input
 } TokenKind;
@@ -36,6 +37,10 @@ void error_at(char *loc, char *fmt, ...);
 //Return true when moving one step. Otherwise, return false.
 bool consume(char *op);
 
+//When the current token is the same as the expected identifier, move one step.
+//Return true when moving one step. Otherwise, return false.
+Token *consume_ident();
+
 //When the current token is the same as the expected symbol, move one step.
 //Otherwise, raise error
 void expect(char *op);
@@ -52,6 +57,9 @@ Token *new_token(TokenKind kind, Token *cur, char *str, int len);
 
 //Tokenize input sequence
 Token *tokenize();
+
+//for debug
+void print_tokens();
 
 //Input program
 extern char *user_input;
@@ -73,6 +81,8 @@ typedef enum{
     ND_NE, //"!="
     ND_LT, //"<"
     ND_LE, //"<="
+    ND_ASSIGN, //"="
+    ND_LVAR, //Local variables
     ND_NUM, //Integer
 } NodeKind;
 
@@ -83,14 +93,18 @@ struct Node{
     Node *lhs; //Left-hand side
     Node *rhs; //Right-hand side
     int val; //Integer value when kind == ND_NUM
+    int offset; //offset from base pointer when kind == ND_LVAR
 };
 
+//Store several sentences
+extern Node *code[100];
+
 //recursive descent parsing
-Node *expr();
+void program();
 
 ///////////
 //codegen.c
 ///////////
 
 //generate code
-void codegen(Node *node);
+void codegen();

@@ -43,6 +43,17 @@ bool consume(char *op){
     return true;
 }
 
+//When the current token is the same as the expected identifier, move one step.
+//Return true when moving one step. Otherwise, return false.
+Token *consume_ident(){
+    if(token->kind != TK_IDENT){
+        return NULL;
+    }
+    Token *t = token;
+    token = token->next;
+    return t;
+}
+
 //When the current token is the same as the expected symbol, move one step.
 //Otherwise, raise error
 void expect(char *op){
@@ -120,7 +131,7 @@ Token *tokenize(){
             p += 2;
         }
         //Single-letter symbol
-        else if(strchr("+-*/()<>", *p)){
+        else if(strchr("+-*/()<>;=", *p)){
             cur = new_token(TK_RESERVED, cur, p++, 1);
         }
         //Integer
@@ -129,6 +140,10 @@ Token *tokenize(){
             char *q = p;
             cur->val = strtol(p, &p, 10);
             cur->len = p - q;
+        }
+        //Identifiers
+        else if('a' <= *p && *p <= 'z'){
+            cur = new_token(TK_IDENT, cur, p++, 1);
         }
         //Error
         else{
